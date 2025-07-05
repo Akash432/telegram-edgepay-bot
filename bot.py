@@ -1,6 +1,23 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import pandas as pd
+import threading
+from flask import Flask
+import os
+
+# Dummy HTTP server
+app_flask = Flask(__name__)
+
+@app_flask.route('/')
+def home():
+    return "✅ EdgePay Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get('PORT', 10000))
+    app_flask.run(host='0.0.0.0', port=port)
+
+# Start Flask in a thread
+threading.Thread(target=run_flask).start()
 
 # In-memory storage for user configs
 user_settings = {}
