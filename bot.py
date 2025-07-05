@@ -10,20 +10,18 @@ def parse_config_lines(lines):
     for line in lines:
         line = line.strip()
         if '-' in line and '=' in line:
-            # Range based fixed rate: 100-1000=5
             range_part, rate = line.split('=')
             min_amt, max_amt = map(float, range_part.split('-'))
             slabs.append({'min': min_amt, 'max': max_amt, 'rate': float(rate)})
         elif line.startswith('>') and '%' in line:
-            # Percentage based rate: >7000=1%
             amt = float(line.split('=')[0].replace('>', ''))
             percent = float(line.split('=')[1].replace('%', ''))
             slabs.append({'min': amt, 'max': float('inf'), 'percent': percent})
     return slabs
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-   await update.message.reply_text(
-    """👋 *Welcome to the EdgePay Bot!*
+    await update.message.reply_text(
+        """👋 *Welcome to the EdgePay Bot!*
 
 📌 Upload an Excel or CSV file with your transaction data.
 
@@ -39,9 +37,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Default column is: `Amount`
 """,
-    parse_mode='Markdown'
-)
-
+        parse_mode='Markdown'
+    )
 
 async def set_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -69,16 +66,15 @@ async def view_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = user_settings.get(user_id, {})
     slabs = config.get('slabs', [])
     column = config.get('column', 'Amount')
-    msg = f"🛠 *Your Current Config:*
+    msg = f"""🛠 *Your Current Config:*
 📊 Column: `{column}`
 
-💸 Slabs:
-"
+💸 Slabs:"""
     for slab in slabs:
         if 'rate' in slab:
-            msg += f"• ₹{int(slab['min'])}–₹{int(slab['max'])} → ₹{slab['rate']}/txn\n"
+            msg += f"\n• ₹{int(slab['min'])}–₹{int(slab['max'])} → ₹{slab['rate']}/txn"
         elif 'percent' in slab:
-            msg += f"• >₹{int(slab['min'])} → {slab['percent']}% volume\n"
+            msg += f"\n• >₹{int(slab['min'])} → {slab['percent']}% volume"
     await update.message.reply_text(msg, parse_mode='Markdown')
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -125,9 +121,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 total_volume += volume
                 detail_lines.append(f"💰 >₹{int(slab['min'])}: ₹{volume:,.2f} × {slab['percent']}% = ₹{amount:,.2f}")
 
-        reply = "*📊 Transaction Charge Summary:*
-
-"
+        reply = "*📊 Transaction Charge Summary:*\n\n"
         reply += "\n".join(detail_lines)
         reply += f"\n━━━━━━━━━━━━━━━━━━━━\n🔢 *Total Charge:* ₹{charge_total:,.2f} ✅"
 
