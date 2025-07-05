@@ -135,9 +135,26 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply += "\n".join(detail_lines)
         reply += f"\n━━━━━━━━━━━━━━━━━━━━\n🔢 *Total Charge:* ₹{charge_total:,.2f} ✅"
 
-        await update.message.reply_text(reply, parse_mode='Markdown')
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        await update.message.reply_text(
+    """👋 *Welcome to the EdgePay Bot!*
+
+📌 Upload an Excel or CSV file with your transaction data.
+
+🔧 Before uploading, you can configure:
+1. Slabs & charges → `/setconfig`
+2. Column name → `/setcolumn <name>`
+3. View current config → `/viewconfig`
+
+✅ Example for /setconfig:
+`100-1000=5
+1001-5000=10
+>5000=1%`
+
+Default column is: `Amount`
+""",
+    parse_mode='Markdown'
+)
+
 
 if __name__ == '__main__':
     import os
