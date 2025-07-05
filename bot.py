@@ -44,12 +44,14 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         percent = 1
         total = (charge5 * 5) + (charge7 * 7) + (volume * (percent / 100))
 
-        reply = (
-            f"₹5 transactions: {charge5} × ₹5 = ₹{charge5 * 5}\n"
-            f"₹7 transactions: {charge7} × ₹7 = ₹{charge7 * 7}\n"
-            f"Volume > ₹7000: ₹{volume:.2f} × {percent}% = ₹{(volume * percent / 100):.2f}\n\n"
-            f"➡️ Total Charge: ₹{total:.2f}"
-        )
+       reply = (
+    "📊 *Transaction Charge Summary*\n\n"
+    f"💸 ₹5 Slab (₹100–₹1000): `{charge5}` × ₹5 = ₹{charge5 * 5}\n"
+    f"💸 ₹7 Slab (₹1001–₹7000): `{charge7}` × ₹7 = ₹{charge7 * 7}\n"
+    f"💰 Volume > ₹7000: ₹{volume:,.2f} × 1% = ₹{(volume * percent / 100):,.2f}\n"
+    "━━━━━━━━━━━━━━━━━━━━\n"
+    f"🔢 *Total Charge:* ₹{total:,.2f} ✅"
+)
         await update.message.reply_text(reply)
     except Exception as e:
         await update.message.reply_text(f"Error: {str(e)}")
