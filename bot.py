@@ -109,15 +109,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     try:
-        if file_path.endswith(".csv"):
-            df = pd.read_csv(file_path)
-        elif file_path.endswith(".xlsx"):
-            df = pd.read_excel(file_path)
-        else:
-            await update.message.reply_text("⚠️ Please send a valid .csv or .xlsx file.")
-            return
+        # Load Excel or CSV
+        df = pd.read_excel(file_path) if file_path.endswith(".xlsx") else pd.read_csv(file_path)
 
-        # Validate required columns
+        # Check columns
         if column_name not in df.columns:
             await update.message.reply_text(f"❌ Column '{column_name}' not found in file.")
             return
@@ -125,33 +120,44 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Column 'Status' not found in file.")
             return
 
-        # Filter only successful transactions
-        df = df[df['Status'].str.lower() == 'success']
-        if df.empty:
-            await update.message.reply_text("⚠️ No 'Success' transactions found. Nothing to calculate.")
+        # Filter statuses
+        df_success = df[df['Status'].str.lower() == 'success']
+        df_refunded = df[df['Status'].str.lower() == 'refunded']
+
+        if df_success.empty:
+            await update.message.reply_text("⚠️ No 'Success' transactions found.")
             return
 
-        # Charge calculations
+        total_success_amount = df_success[column_name].sum()
+        refunded_amount = df_refunded[column_name].sum()
+        chargeable_amount = total_success_amount - refunded_amount
+
+        # Slab calculations
         charge_total = 0
         detail_lines = []
-        total_volume = 0
 
         for slab in slabs:
             if 'rate' in slab:
-                count = df[(df[column_name] >= slab['min']) & (df[column_name] <= slab['max'])].shape[0]
+                count = df_success[(df_success[column_name] >= slab['min']) & (df_success[column_name] <= slab['max'])].shape[0]
                 amount = count * slab['rate']
                 charge_total += amount
                 detail_lines.append(f"💸 ₹{int(slab['min'])}–₹{int(slab['max'])}: `{count}` × ₹{slab['rate']} = ₹{amount}")
             elif 'percent' in slab:
-                volume = df[df[column_name] > slab['min']][column_name].sum()
+                volume = df_success[df_success[column_name] > slab['min']][column_name].sum()
                 amount = volume * (slab['percent'] / 100)
                 charge_total += amount
-                total_volume += volume
                 detail_lines.append(f"💰 >₹{int(slab['min'])}: ₹{volume:,.2f} × {slab['percent']}% = ₹{amount:,.2f}")
 
-        reply = "*📊 Transaction Charge Summary:*\n\n"
-        reply += "\n".join(detail_lines)
-        reply += f"\n━━━━━━━━━━━━━━━━━━━━\n🔢 *Total Charge:* ₹{charge_total:,.2f} ✅"
+        reply = (
+            f"*📊 Transaction Charge Summary:*\n\n"
+            f"✅ Successful Transactions: {len(df_success)}\n"
+            f"💼 Total Success Amount: ₹{total_success_amount:,.2f}\n"
+            f"↩️ Refunded Amount: ₹{refunded_amount:,.2f}\n"
+            f"💳 Chargeable Amount: ₹{chargeable_amount:,.2f}\n\n"
+            + "\n".join(detail_lines) +
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"🧾 *Total Charge:* ₹{charge_total:,.2f} ✅"
+        )
 
         await update.message.reply_text(reply, parse_mode='Markdown')
     except Exception as e:
