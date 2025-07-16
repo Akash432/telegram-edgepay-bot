@@ -111,7 +111,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         df = pd.read_excel(file_path) if file_path.endswith(".xlsx") else pd.read_csv(file_path)
 
-        # Check required columns
+        # Validation
         if column_name not in df.columns:
             await update.message.reply_text(f"❌ Column '{column_name}' not found in file.")
             return
@@ -119,21 +119,24 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Column 'Status' not found in file.")
             return
 
-        # Status filters
+        # Filter transactions
         df_success = df[df['Status'].str.lower() == 'success']
         df_failed = df[df['Status'].str.lower() == 'failed']
-        df_refunded = df[df['Status'].str.lower() == 'refunded']
+        df_refunded_explicit = df[df['Status'].str.lower() == 'refunded']
 
+        # For amount deduction: failed + refunded
+        df_refunded_total = pd.concat([df_failed, df_refunded_explicit])
+        
         if df_success.empty:
             await update.message.reply_text("⚠️ No 'Success' transactions found.")
             return
 
-        # Summaries
+        # Amount calculations
         total_success_amount = df_success[column_name].sum()
-        refunded_amount = df_refunded[column_name].sum()
+        refunded_amount = df_refunded_total[column_name].sum()
         chargeable_amount = total_success_amount - refunded_amount
 
-        # Charge calculations
+        # Fee calculations
         charge_total = 0
         detail_lines = []
 
@@ -154,9 +157,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"*📊 Transaction Charge Summary:*\n\n"
             f"✅ Successful Transactions: {len(df_success)}\n"
             f"❌ Failed Transactions: {len(df_failed)}\n"
-            f"↩️ Refunded Transactions: {len(df_refunded)}\n\n"
+            f"↩️ Refunded Transactions: {len(df_refunded_explicit)}\n\n"
             f"💼 Total Success Amount: ₹{total_success_amount:,.2f}\n"
-            f"↩️ Refunded Amount: ₹{refunded_amount:,.2f}\n"
+            f"↩️ Refunded Amount (Failed + Refunded): ₹{refunded_amount:,.2f}\n"
             f"💳 Chargeable Amount: ₹{chargeable_amount:,.2f}\n\n"
             + "\n".join(detail_lines) +
             f"\n━━━━━━━━━━━━━━━━━━━━\n"
@@ -164,6 +167,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(reply, parse_mode='Markdown')
+
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
