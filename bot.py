@@ -117,10 +117,21 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ Please send a valid .csv or .xlsx file.")
             return
 
+        # Validate required columns
         if column_name not in df.columns:
             await update.message.reply_text(f"❌ Column '{column_name}' not found in file.")
             return
+        if 'Status' not in df.columns:
+            await update.message.reply_text("❌ Column 'Status' not found in file.")
+            return
 
+        # Filter only successful transactions
+        df = df[df['Status'].str.lower() == 'success']
+        if df.empty:
+            await update.message.reply_text("⚠️ No 'Success' transactions found. Nothing to calculate.")
+            return
+
+        # Charge calculations
         charge_total = 0
         detail_lines = []
         total_volume = 0
@@ -145,6 +156,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply, parse_mode='Markdown')
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
+
 
 if __name__ == '__main__':
     import os
