@@ -156,10 +156,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = (
             f"*📊 Transaction Charge Summary:*\n\n"
             f"✅ Successful Transactions: {len(df_success)}\n"
-            f"❌ Failed Transactions: {len(df_failed)}\n"
-            f"↩️ Refunded Transactions: {len(df_refunded_explicit)}\n\n"
+            f"❌ Failed Transactions: {len(df_failed)}\n\n"
             f"💼 Total Success Amount: ₹{total_success_amount:,.2f}\n"
-            f"↩️ Refunded Amount (Failed + Refunded): ₹{refunded_amount:,.2f}\n"
+            f"↩️ Refunded Amount : ₹{refunded_amount:,.2f}\n"
             f"💳 Chargeable Amount: ₹{chargeable_amount:,.2f}\n\n"
             + "\n".join(detail_lines) +
             f"\n━━━━━━━━━━━━━━━━━━━━\n"
