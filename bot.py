@@ -95,74 +95,82 @@ async def view_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode='Markdown')
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file = await context.bot.get_file(update.message.document.file_id)
-    file_bytes = await file.download_as_bytearray()
-    df = pd.read_csv(BytesIO(file_bytes))
+    user_id = update.effective_user.id
+    file = await update.message.document.get_file()
+    file_path = f"{file.file_unique_id}_{update.message.document.file_name}"
+    await file.download_to_drive(file_path)
 
-    # Clean up columns
-    df.columns = df.columns.str.strip().str.lower()
-    
-    if 'status' not in df.columns or 'amount' not in df.columns:
-        await update.message.reply_text("❌ The uploaded file must contain 'status' and 'amount' columns.")
-        return
+    config = user_settings.get(user_id, {})
+    column_name = config.get('column', 'Amount')
+    slabs = config.get('slabs', [
+        {'min': 100, 'max': 1000, 'rate': 5},
+        {'min': 1001, 'max': 7000, 'rate': 7},
+        {'min': 7001, 'max': float('inf'), 'percent': 1}
+    ])
 
-    df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-    df = df.dropna(subset=['amount'])
+    try:
+        df = pd.read_excel(file_path) if file_path.endswith(".xlsx") else pd.read_csv(file_path)
 
-    # Filter
-    success_df = df[df['status'].str.lower() == 'success']
-    failed_df = df[df['status'].str.lower() == 'failed']
-    refunded_df = df[df['status'].str.lower() == 'refunded']
+        # Validation
+        if column_name not in df.columns:
+            await update.message.reply_text(f"❌ Column '{column_name}' not found in file.")
+            return
+        if 'Status' not in df.columns:
+            await update.message.reply_text("❌ Column 'Status' not found in file.")
+            return
 
-    total_success = len(success_df)
-    total_failed = len(failed_df)
-    total_refunded = len(refunded_df)
+        # Filter transactions
+        df_success = df[df['Status'].str.lower() == 'success']
+        df_failed = df[df['Status'].str.lower() == 'failed']
+        df_refunded_explicit = df[df['Status'].str.lower() == 'refunded']
 
-    success_amount = success_df['amount'].sum()
-    refunded_amount = refunded_df['amount'].sum()
-    chargeable_amount = success_amount - refunded_amount
+        # For amount deduction: failed + refunded
+        df_refunded_total = pd.concat([df_failed, df_refunded_explicit])
+        
+        if df_success.empty:
+            await update.message.reply_text("⚠️ No 'Success' transactions found.")
+            return
 
-    # Apply configs
-    amounts = success_df['amount'].tolist()
+        # Amount calculations
+        total_success_amount = df_success[column_name].sum()
+        refunded_amount = df_refunded_total[column_name].sum()
+        chargeable_amount = total_success_amount - refunded_amount
 
-    our = calculate_charges(amounts, our_config)
-    castler = calculate_charges(amounts, castler_config)
+        # Fee calculations
+        charge_total = 0
+        detail_lines = []
 
-    our_total = round(our["fixed_total"] + our["percent_total"], 2)
-    castler_total = round(castler["fixed_total"] + castler["percent_total"], 2)
-    grand_profit = round(our_total - castler_total, 2)
+        for slab in slabs:
+            if 'rate' in slab:
+                count = df_success[(df_success[column_name] >= slab['min']) & (df_success[column_name] <= slab['max'])].shape[0]
+                amount = count * slab['rate']
+                charge_total += amount
+                detail_lines.append(f"💸 ₹{int(slab['min'])}–₹{int(slab['max'])}: {count} × ₹{slab['rate']} = ₹{amount:,.2f}")
+            elif 'percent' in slab:
+                volume = df_success[df_success[column_name] > slab['min']][column_name].sum()
+                amount = volume * (slab['percent'] / 100)
+                charge_total += amount
+                detail_lines.append(f"💰 >₹{int(slab['min'])}: ₹{volume:,.2f} × {slab['percent']}% = ₹{amount:,.2f}")
 
-    # Format message
-    message = f"""
-📊 <b>Transaction Charge Summary</b>:
+        # Final reply
+        reply = (
+            f"*📊 Transaction Charge Summary:*\n\n"
+            f"✅ Successful Transactions: {len(df_success)}\n"
+            f"❌ Failed Transactions: {len(df_failed)}\n"
+            f"↩️ Refunded Transactions: {len(df_refunded_explicit)}\n\n"
+            f"💼 Total Success Amount: ₹{total_success_amount:,.2f}\n"
+            f"↩️ Refunded Amount (Failed + Refunded): ₹{refunded_amount:,.2f}\n"
+            f"💳 Chargeable Amount: ₹{chargeable_amount:,.2f}\n\n"
+            + "\n".join(detail_lines) +
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"🧾 *Total Charge:* ₹{charge_total:,.2f} ✅"
+        )
 
-✅ Successful Transactions: {total_success}
-❌ Failed Transactions: {total_failed}
-↩️ Refunded Transactions: {total_refunded}
+        await update.message.reply_text(reply, parse_mode='Markdown')
 
-💼 Total Success Amount: ₹{success_amount:,.2f}
-↩️ Refunded Amount: ₹{refunded_amount:,.2f}
-💳 Chargeable Amount: ₹{chargeable_amount:,.2f}
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
 
-━━━━━━━━━━━━━━━━━━━━
-<b>💼 Our Charges:</b>
-💸 ₹100–₹1000: {our['count_fixed_1']} × ₹{our_config['100-1000']} = ₹{our['count_fixed_1'] * our_config['100-1000']:.2f}
-💰 >₹1001: ₹{our['amount_percent']:,.2f} × {our_config['>1001']}% = ₹{our['percent_total']:.2f}
-<b>Total (Our Charges): ₹{our_total:.2f}</b>
-
-━━━━━━━━━━━━━━━━━━━━
-<b>🏦 Castler Charges:</b>
-💸 ₹100–₹1000: {castler['count_fixed_1']} × ₹{castler_config['100-1000']} = ₹{castler['count_fixed_1'] * castler_config['100-1000']:.2f}
-💸 ₹1001–₹7000: {castler['count_fixed_2']} × ₹{castler_config['1001-7000']} = ₹{castler['count_fixed_2'] * castler_config['1001-7000']:.2f}
-💰 >₹7001: ₹{castler['amount_percent']:,.2f} × {castler_config['>7001']}% = ₹{castler['percent_total']:.2f}
-<b>Total (Castler Charges): ₹{castler_total:.2f}</b>
-
-━━━━━━━━━━━━━━━━━━━━
-💹 <b>Grand Profit</b> = Our Charges − Castler Charges  
-🧾 ₹{our_total:.2f} − ₹{castler_total:.2f} = <b>₹{grand_profit:.2f} ✅</b>
-"""
-
-    await update.message.reply_text(message, parse_mode="HTML")
 
 
 if __name__ == '__main__':
